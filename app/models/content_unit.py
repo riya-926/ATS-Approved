@@ -1,4 +1,4 @@
-"""Content unit models for structured resume data."""
+"""Content unit models for structured resume data"""
 from enum import Enum
 from typing import Optional
 

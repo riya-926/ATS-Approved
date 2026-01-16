@@ -1,5 +1,5 @@
 """
-DOCX parser that extracts content units with stable IDs.
+DOCX parser that extracts content units with stable IDs
 
 This parser extracts editable text content while preserving document structure.
 It assigns stable IDs to each content unit for later patching.

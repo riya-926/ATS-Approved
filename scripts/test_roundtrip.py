@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Standalone script to test the DOCX parse → edit → patch round-trip.
+Standalone script to test the DOCX parse → edit → patch round-trip
 
 This script validates the core constraint: editing content without changing layout.
 

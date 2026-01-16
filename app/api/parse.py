@@ -1,5 +1,5 @@
 """
-API endpoints for parsing resumes into structured content units.
+API endpoints for parsing resumes into structured content units
 """
 from pathlib import Path
 

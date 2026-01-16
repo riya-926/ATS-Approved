@@ -1,5 +1,5 @@
 """
-DOCX patcher that applies edits back to the document preserving structure.
+DOCX patcher that applies edits back to the document preserving structure
 
 This module patches text content in the original DOCX while preserving
 all styles, formatting, spacing, and layout.

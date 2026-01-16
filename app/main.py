@@ -1,5 +1,5 @@
 """
-FastAPI main application entry point.
+FastAPI main application entry point
 """
 from fastapi import FastAPI
 

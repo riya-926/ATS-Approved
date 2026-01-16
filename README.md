@@ -13,7 +13,7 @@ This product performs targeted, evidence-based text edits (bullets, summaries, s
 
 ## Project Status
 
-### ✅ Step 1: Core Round-Trip Validation (COMPLETE)
+### Step 1: Core Round-Trip Validation (COMPLETE)
 
 The first step validates the core constraint: **editing content without changing layout**.
 
