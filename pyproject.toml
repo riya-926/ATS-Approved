@@ -1,0 +1,17 @@
+[project]
+name = "ats-approved"
+version = "0.1.0"
+description = "ATS-optimized resume editor with frozen layout"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.104.1",
+    "uvicorn[standard]>=0.24.0",
+    "python-docx>=1.1.0",
+    "pydantic>=2.5.0",
+    "python-multipart>=0.0.6",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
