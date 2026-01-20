@@ -3,7 +3,7 @@ FastAPI main application entry point
 """
 from fastapi import FastAPI
 
-from app.api import jd, parse, test_roundtrip
+from app.api import evidence, jd, parse, test_roundtrip
 
 app = FastAPI(title="ATS-Approved", version="0.1.0")
 
@@ -11,6 +11,7 @@ app = FastAPI(title="ATS-Approved", version="0.1.0")
 app.include_router(parse.router)
 app.include_router(test_roundtrip.router)
 app.include_router(jd.router)
+app.include_router(evidence.router)
 
 
 @app.get("/")
