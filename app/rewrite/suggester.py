@@ -139,8 +139,11 @@ def suggest_rewrite_for_unit(
         prompt = _build_rewrite_prompt(content_unit, jd_signals, evidence_map, all_content_units)
 
         # Call Claude API
+        # Note: Model names may vary based on your API access level
+        # Common formats: claude-3-opus-20240229, claude-3-sonnet-20240229, claude-3-haiku-20240307
+        # If you get 404 errors, check Anthropic console for available models
         message = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-3-haiku-20240307",  # Using Haiku (fastest, most available)
             max_tokens=1024,
             temperature=0.3,  # Lower temperature for more consistent, factual outputs
             messages=[
@@ -225,7 +228,7 @@ def suggest_rewrites(
         resume.content_units,
         key=lambda u: (
             u.id not in units_with_evidence,  # Units with evidence first
-            type_priority.get(u.type.value, 99),  # Then by type priority
+            type_priority.get(u.type, 99),  # Then by type priority (u.type is already a string due to use_enum_values=True)
         ),
     )
 
