@@ -70,22 +70,50 @@ def _build_rewrite_prompt(
     jd_skills = [skill.name for skill in jd_signals.hard_skills[:10]]  # Top 10
     jd_responsibilities = [resp.full_text for resp in jd_signals.responsibilities[:10]]  # Top 10
 
-    prompt = f"""You are an expert resume writer helping optimize a resume for an Applicant Tracking System (ATS).
+    # Determine tense from original text (for consistency)
+    original_text_lower = content_unit.content.lower()
+    is_past_tense = any(
+        word in original_text_lower
+        for word in ["developed", "designed", "implemented", "created", "built", "managed", "led", "improved", "optimized", "delivered", "achieved", "increased", "reduced", "maintained"]
+    )
+    is_present_tense = any(
+        word in original_text_lower
+        for word in ["develop", "design", "implement", "create", "build", "manage", "lead", "improve", "optimize", "deliver", "achieve", "increase", "reduce", "maintain"]
+    )
+    
+    tense_instruction = ""
+    if is_past_tense:
+        tense_instruction = "CRITICAL: Maintain PAST TENSE throughout (e.g., 'developed', 'designed', 'implemented'). Do NOT mix tenses."
+    elif is_present_tense:
+        tense_instruction = "CRITICAL: Maintain PRESENT TENSE throughout (e.g., 'develop', 'design', 'implement'). Do NOT mix tenses."
+    else:
+        tense_instruction = "CRITICAL: Maintain the same verb tense as the original text. Do NOT change tense."
 
-**CRITICAL CONSTRAINTS:**
-1. NEVER add skills, tools, technologies, or metrics that are NOT already in the resume
-2. NEVER change the meaning or make false claims
-3. ONLY improve wording, clarity, and alignment with the job description
-4. Keep the same length or slightly shorter (ATS-friendly)
-5. Use action verbs and quantifiable results when possible
-6. Make it more ATS-friendly (use standard terminology)
+    prompt = f"""You are an expert ATS resume optimizer. Your goal is to achieve 80%+ ATS compatibility score while making ONLY meaningful, impactful improvements.
+
+**CRITICAL CONSTRAINTS (NON-NEGOTIABLE):**
+1. NEVER add skills, tools, technologies, metrics, or achievements NOT already in the resume
+2. NEVER change the meaning, make false claims, or exaggerate accomplishments
+3. NEVER change verb tense - {tense_instruction}
+4. REMOVE all fluff words: "very", "really", "quite", "rather", "somewhat", "fairly", "pretty", "extremely", "incredibly", "absolutely", "totally", "completely", "basically", "essentially", "generally", "usually", "typically", "often", "sometimes"
+5. Use standard ATS-friendly terminology (avoid jargon, abbreviations without context, or overly creative phrasing)
+6. Keep length similar or slightly shorter (ATS parsers prefer concise, scannable text)
+7. Only make changes if they meaningfully improve ATS parsing or JD alignment - don't change for the sake of changing
+
+**ATS OPTIMIZATION REQUIREMENTS (Target: 80%+ score):**
+- Use standard industry terminology that ATS systems recognize
+- Include relevant keywords from the job description naturally
+- Use clear, direct language (avoid passive voice when possible)
+- Quantify achievements with numbers/metrics when available
+- Use strong action verbs at the start of bullet points
+- Avoid special characters that break ATS parsing (em dashes, fancy quotes, etc.)
 
 **JOB DESCRIPTION REQUIREMENTS:**
-Key Skills: {', '.join(jd_skills)}
-Key Responsibilities: {', '.join(jd_responsibilities[:5])}
+Key Skills: {', '.join(jd_skills) if jd_skills else 'None specified'}
+Key Responsibilities: {', '.join(jd_responsibilities[:5]) if jd_responsibilities else 'None specified'}
 
 **EVIDENCE IN THIS RESUME UNIT:**
-{chr(10).join(relevant_evidence) if relevant_evidence else 'No direct evidence matches found for this unit.'}
+{chr(10).join(relevant_evidence) if relevant_evidence else 'No direct evidence matches found for this unit. Focus on ATS optimization and clarity improvements only.'}
 
 **ORIGINAL TEXT TO IMPROVE:**
 {content_unit.content}
@@ -93,22 +121,33 @@ Key Responsibilities: {', '.join(jd_responsibilities[:5])}
 **CONTENT UNIT TYPE:** {content_unit.type}
 
 **TASK:**
-Rewrite the above text to better align with the job description while:
-- Preserving the original meaning and truthfulness
-- Only using information already present in the resume
-- Making it more ATS-friendly and impactful
-- Using stronger action verbs and clearer language
+Rewrite the above text to achieve 80%+ ATS compatibility while:
+- Preserving EXACT meaning and truthfulness (no exaggeration)
+- Maintaining the SAME verb tense as original
+- Removing ALL fluff words and filler language
+- Using standard ATS-recognized terminology
+- Aligning with JD keywords naturally (only if already present in resume)
+- Making ONLY meaningful improvements (if original is already strong, make minimal changes)
+- Keeping structure and formatting intact
+
+**IMPORTANT:**
+- If the original text is already well-written and ATS-friendly, make MINIMAL changes
+- Only suggest changes that meaningfully improve ATS parsing or JD alignment
+- Prioritize clarity, conciseness, and ATS keyword optimization
+- Do NOT add unnecessary words or phrases
 
 **OUTPUT FORMAT (JSON):**
 {{
-  "suggested_text": "Your improved version here",
-  "reasoning": "Brief explanation of improvements (2-3 sentences)",
+  "suggested_text": "Your improved version here (maintain tense, remove fluff, optimize for ATS)",
+  "reasoning": "Brief explanation of improvements (2-3 sentences). Explain how this improves ATS score and JD alignment.",
   "jd_alignment": {{
     "skills_addressed": ["list of JD skills this addresses"],
-    "responsibilities_addressed": ["list of JD responsibilities this addresses"]
+    "responsibilities_addressed": ["list of JD responsibilities this addresses"],
+    "ats_keywords_added": ["list of ATS-friendly keywords naturally incorporated"]
   }},
   "preserves_meaning": true,
-  "confidence": 0.0-1.0
+  "confidence": 0.0-1.0,
+  "estimated_ats_score_improvement": "Low/Medium/High"
 }}
 
 Return ONLY valid JSON, no additional text."""
@@ -145,7 +184,7 @@ def suggest_rewrite_for_unit(
         message = client.messages.create(
             model="claude-3-haiku-20240307",  # Using Haiku (fastest, most available)
             max_tokens=1024,
-            temperature=0.3,  # Lower temperature for more consistent, factual outputs
+            temperature=0.2,  # Lower temperature for more consistent, factual outputs (reduced from 0.3 for better accuracy)
             messages=[
                 {
                     "role": "user",
@@ -166,13 +205,18 @@ def suggest_rewrite_for_unit(
         response_data = json.loads(response_text)
 
         # Build RewriteSuggestion
+        jd_alignment = response_data.get("jd_alignment", {})
+        # Add estimated ATS score improvement if provided
+        if "estimated_ats_score_improvement" in response_data:
+            jd_alignment["estimated_ats_score_improvement"] = response_data.get("estimated_ats_score_improvement")
+        
         suggestion = RewriteSuggestion(
             content_unit_id=content_unit.id,
             original_text=content_unit.content,
             suggested_text=response_data.get("suggested_text", content_unit.content),
             confidence=response_data.get("confidence", 0.7),
-            reasoning=response_data.get("reasoning", "Improved alignment with job description"),
-            jd_alignment=response_data.get("jd_alignment", {}),
+            reasoning=response_data.get("reasoning", "Improved alignment with job description and ATS optimization"),
+            jd_alignment=jd_alignment,
             preserves_meaning=response_data.get("preserves_meaning", True),
             risk_score=0.0,  # Will be calculated by validators later
         )
