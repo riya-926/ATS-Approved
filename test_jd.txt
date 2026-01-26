@@ -1,0 +1,34 @@
+Software Engineer - Full Stack Developer
+
+We are seeking an experienced Software Engineer to join our dynamic team. The ideal candidate will have strong experience in full-stack development with expertise in modern web technologies.
+
+Key Responsibilities:
+- Develop and maintain REST APIs using Python and FastAPI
+- Design and implement scalable microservices architecture
+- Build responsive frontend applications using React and TypeScript
+- Optimize database performance and query efficiency
+- Implement automated testing and CI/CD pipelines
+- Collaborate with cross-functional teams to deliver high-quality software
+- Write clean, maintainable code following best practices
+
+Required Skills:
+- Python (3+ years experience)
+- JavaScript and TypeScript
+- React framework
+- FastAPI or similar Python web frameworks
+- PostgreSQL or similar relational databases
+- REST API development
+- Microservices architecture
+- Docker and containerization
+- AWS cloud services
+- Git version control
+- Automated testing (unit, integration, e2e)
+
+Preferred Qualifications:
+- Experience with CI/CD pipelines
+- Knowledge of Kubernetes
+- Understanding of system design principles
+- Strong problem-solving skills
+- Excellent communication abilities
+
+This is a full-time position offering competitive compensation and benefits. We value innovation, collaboration, and continuous learning.
