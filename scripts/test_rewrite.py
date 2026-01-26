@@ -98,7 +98,28 @@ def main():
     print("=" * 80)
     print(f"Total suggestions: {suggestions.total_suggestions}")
     print(f"Coverage improvement: {suggestions.coverage_improvement:.2%}")
-    print(f"Metadata: {json.dumps(suggestions.metadata, indent=2)}")
+    
+    # Display bullet point analysis
+    if "bullet_analysis" in suggestions.metadata:
+        bullet_info = suggestions.metadata["bullet_analysis"]
+        print(f"\n📊 Bullet Point Analysis:")
+        print(f"   Target bullets per section: {bullet_info.get('target_bullets', 'N/A')}")
+        print(f"   Is consistent: {bullet_info.get('is_consistent', 'N/A')}")
+        if bullet_info.get('experience_bullet_counts'):
+            print(f"   Experience sections: {bullet_info['experience_bullet_counts']}")
+        if bullet_info.get('project_bullet_counts'):
+            print(f"   Project sections: {bullet_info['project_bullet_counts']}")
+    
+    # Display length analysis
+    if "length_analysis" in suggestions.metadata:
+        length_info = suggestions.metadata["length_analysis"]
+        print(f"\n📄 Resume Length Analysis:")
+        print(f"   Estimated pages: {length_info.get('estimated_pages', 0):.2f}")
+        print(f"   Total words: {length_info.get('total_words', 0)}")
+        print(f"   Total characters: {length_info.get('total_chars', 0)}")
+        print(f"   Needs compression: {'Yes' if length_info.get('needs_compression', False) else 'No'}")
+    
+    print(f"\nMetadata: {json.dumps(suggestions.metadata, indent=2, default=str)}")
 
     # Save to JSON file
     output_file = "rewrite_suggestions.json"

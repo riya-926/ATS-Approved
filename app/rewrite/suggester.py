@@ -8,12 +8,13 @@ This module generates improved versions of resume content based on:
 """
 import json
 import os
+from collections import defaultdict
 from typing import Optional
 
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
-from app.models.content_unit import ContentUnit, ParsedResume
+from app.models.content_unit import ContentUnit, ContentUnitType, ParsedResume
 from app.models.evidence import EvidenceMap
 from app.models.jd_signals import JobDescriptionSignals
 from app.models.rewrite import RewriteSuggestion, RewriteSuggestions
@@ -32,11 +33,98 @@ if not ANTHROPIC_API_KEY:
 client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
 
+def _analyze_bullet_point_consistency(resume: ParsedResume) -> dict:
+    """
+    Analyze bullet point counts per experience/project section.
+    
+    Returns:
+        dict with:
+        - 'target_bullets': Target number of bullets per section (2 or 3)
+        - 'experience_bullet_counts': Dict mapping section to bullet count
+        - 'project_bullet_counts': Dict mapping section to bullet count
+        - 'is_consistent': Whether all sections have same count
+    """
+    # Group bullets by section (using section_index or paragraph_index)
+    experience_bullets = [u for u in resume.content_units if u.type == ContentUnitType.EXPERIENCE_BULLET]
+    project_bullets = [u for u in resume.content_units if u.type == ContentUnitType.PROJECT_DESCRIPTION]
+    
+    # Count bullets per section
+    exp_sections = defaultdict(int)
+    proj_sections = defaultdict(int)
+    
+    for bullet in experience_bullets:
+        section_key = bullet.section_index if bullet.section_index is not None else 0
+        exp_sections[section_key] += 1
+    
+    for bullet in project_bullets:
+        section_key = bullet.section_index if bullet.section_index is not None else 0
+        proj_sections[section_key] += 1
+    
+    # Determine target bullet count
+    all_exp_counts = list(exp_sections.values()) if exp_sections else []
+    all_proj_counts = list(proj_sections.values()) if proj_sections else []
+    all_counts = all_exp_counts + all_proj_counts
+    
+    if not all_counts:
+        return {
+            'target_bullets': 3,
+            'experience_bullet_counts': dict(exp_sections),
+            'project_bullet_counts': dict(proj_sections),
+            'is_consistent': True
+        }
+    
+    # If all sections have same count, use that
+    if len(set(all_counts)) == 1:
+        target = all_counts[0]
+    # If mostly 3 bullets, target 3
+    elif all_counts.count(3) >= len(all_counts) * 0.5:
+        target = 3
+    # Otherwise target 2-3 (prefer 3 but allow 2)
+    else:
+        target = 3  # Default to 3, but allow flexibility
+    
+    is_consistent = len(set(all_counts)) == 1
+    
+    return {
+        'target_bullets': target,
+        'experience_bullet_counts': dict(exp_sections),
+        'project_bullet_counts': dict(proj_sections),
+        'is_consistent': is_consistent
+    }
+
+
+def _estimate_resume_length(resume: ParsedResume) -> dict:
+    """
+    Estimate resume length in pages.
+    
+    Returns:
+        dict with:
+        - 'estimated_pages': Estimated page count
+        - 'total_chars': Total character count
+        - 'total_words': Total word count
+        - 'needs_compression': Whether needs to be compressed to 1 page
+    """
+    total_chars = sum(len(unit.content) for unit in resume.content_units)
+    total_words = sum(len(unit.content.split()) for unit in resume.content_units)
+    
+    # Rough estimate: ~500 words per page, ~2500 chars per page
+    estimated_pages = max(total_words / 500, total_chars / 2500)
+    
+    return {
+        'estimated_pages': estimated_pages,
+        'total_chars': total_chars,
+        'total_words': total_words,
+        'needs_compression': estimated_pages > 1.0
+    }
+
+
 def _build_rewrite_prompt(
     content_unit: ContentUnit,
     jd_signals: JobDescriptionSignals,
     evidence_map: EvidenceMap,
     all_content_units: list[ContentUnit],
+    bullet_analysis: dict,
+    length_analysis: dict,
 ) -> str:
     """
     Build a detailed prompt for Claude to generate rewrite suggestions.
@@ -88,6 +176,24 @@ def _build_rewrite_prompt(
         tense_instruction = "CRITICAL: Maintain PRESENT TENSE throughout (e.g., 'develop', 'design', 'implement'). Do NOT mix tenses."
     else:
         tense_instruction = "CRITICAL: Maintain the same verb tense as the original text. Do NOT change tense."
+    
+    # Bullet point consistency instructions
+    bullet_instruction = ""
+    if content_unit.type in [ContentUnitType.EXPERIENCE_BULLET, ContentUnitType.PROJECT_DESCRIPTION]:
+        target_bullets = bullet_analysis.get('target_bullets', 3)
+        is_consistent = bullet_analysis.get('is_consistent', True)
+        if not is_consistent:
+            bullet_instruction = f"CRITICAL: Ensure this section has exactly {target_bullets} bullet points. All experience/project sections must have the same number of bullets ({target_bullets}) for consistency."
+        else:
+            bullet_instruction = f"Maintain {target_bullets} bullet points per section for consistency."
+    
+    # Page limit instructions
+    page_instruction = ""
+    if length_analysis.get('needs_compression', False):
+        estimated_pages = length_analysis.get('estimated_pages', 1.0)
+        page_instruction = f"CRITICAL: Resume is currently {estimated_pages:.1f} pages. MUST compress to exactly 1 page. Make text more concise, remove redundant information, combine similar points. Target: ~500 words total, ~2500 characters total."
+    else:
+        page_instruction = "Keep resume to 1 page maximum. If approaching limit, prioritize conciseness."
 
     prompt = f"""You are an expert ATS resume optimizer. Your goal is to achieve 80%+ ATS compatibility score while making ONLY meaningful, impactful improvements.
 
@@ -97,8 +203,10 @@ def _build_rewrite_prompt(
 3. NEVER change verb tense - {tense_instruction}
 4. REMOVE all fluff words: "very", "really", "quite", "rather", "somewhat", "fairly", "pretty", "extremely", "incredibly", "absolutely", "totally", "completely", "basically", "essentially", "generally", "usually", "typically", "often", "sometimes"
 5. Use standard ATS-friendly terminology (avoid jargon, abbreviations without context, or overly creative phrasing)
-6. Keep length similar or slightly shorter (ATS parsers prefer concise, scannable text)
-7. Only make changes if they meaningfully improve ATS parsing or JD alignment - don't change for the sake of changing
+6. {page_instruction}
+7. {bullet_instruction}
+8. Keep length similar or slightly shorter (ATS parsers prefer concise, scannable text)
+9. Only make changes if they meaningfully improve ATS parsing or JD alignment - don't change for the sake of changing
 
 **ATS OPTIMIZATION REQUIREMENTS (Target: 80%+ score):**
 - Use standard industry terminology that ATS systems recognize
@@ -160,6 +268,8 @@ def suggest_rewrite_for_unit(
     jd_signals: JobDescriptionSignals,
     evidence_map: EvidenceMap,
     all_content_units: list[ContentUnit],
+    bullet_analysis: dict,
+    length_analysis: dict,
 ) -> Optional[RewriteSuggestion]:
     """
     Generate a rewrite suggestion for a single content unit.
@@ -175,7 +285,7 @@ def suggest_rewrite_for_unit(
     """
     try:
         # Build prompt
-        prompt = _build_rewrite_prompt(content_unit, jd_signals, evidence_map, all_content_units)
+        prompt = _build_rewrite_prompt(content_unit, jd_signals, evidence_map, all_content_units, bullet_analysis, length_analysis)
 
         # Call Claude API
         # Note: Model names may vary based on your API access level
@@ -250,6 +360,12 @@ def suggest_rewrites(
     """
     suggestions: list[RewriteSuggestion] = []
 
+    # Analyze bullet point consistency
+    bullet_analysis = _analyze_bullet_point_consistency(resume)
+    
+    # Analyze resume length
+    length_analysis = _estimate_resume_length(resume)
+
     # Prioritize content units with evidence matches
     units_with_evidence = set()
     for skill_match in evidence_map.skill_matches:
@@ -282,7 +398,7 @@ def suggest_rewrites(
         if len(unit.content.strip()) < 10:
             continue
 
-        suggestion = suggest_rewrite_for_unit(unit, jd_signals, evidence_map, resume.content_units)
+        suggestion = suggest_rewrite_for_unit(unit, jd_signals, evidence_map, resume.content_units, bullet_analysis, length_analysis)
         if suggestion:
             suggestions.append(suggestion)
 
@@ -296,6 +412,8 @@ def suggest_rewrites(
         "units_with_evidence": len(units_with_evidence),
         "suggestions_generated": len(suggestions),
         "coverage_score_before": evidence_map.coverage_score,
+        "bullet_analysis": bullet_analysis,
+        "length_analysis": length_analysis,
     }
 
     return RewriteSuggestions(
