@@ -47,11 +47,14 @@ def parse_docx(file_path: str | Path) -> ParsedResume:
             if not text:
                 continue
 
-            # Detect section headers (simple heuristic: bold + short text + common headers)
+            # Detect section headers (check for Heading style OR bold + short text + common headers)
             is_header = (
-                any(run.bold for run in paragraph.runs)
-                and len(text) < 80
+                len(text) < 80
                 and text.upper() in ["EXPERIENCE", "WORK EXPERIENCE", "EMPLOYMENT", "SKILLS", "SUMMARY", "EDUCATION"]
+                and (
+                    paragraph.style.name.startswith("Heading")
+                    or any(run.bold for run in paragraph.runs)
+                )
             )
 
             if is_header:
