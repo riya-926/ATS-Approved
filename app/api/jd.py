@@ -31,6 +31,7 @@ async def extract_jd_signals_endpoint(request: JDTextRequest):
             "responsibilities": [resp.model_dump() for resp in signals.responsibilities],
             "keywords": [kw.model_dump() for kw in signals.keywords],
             "seniority_cues": [cue.model_dump() for cue in signals.seniority_cues],
+            "raw_text": signals.raw_text,  # Include raw_text for JobDescriptionSignals model
             "metadata": signals.metadata,
         }
     except Exception as e:
