@@ -34,9 +34,19 @@ class ContentUnit(BaseModel):
         use_enum_values = True
 
 
+class DisplayItem(BaseModel):
+    """Non-editable display item for full document layout."""
+
+    kind: str = Field(..., description="display | editable")
+    content: Optional[str] = Field(None, description="Text content for display items")
+    display_type: Optional[str] = Field(None, description="name | contact | section_header | job_title | company_dates | education_degree | education_school")
+    unit_id: Optional[str] = Field(None, description="Content unit ID for editable items")
+
+
 class ParsedResume(BaseModel):
     """Structured representation of a parsed resume."""
 
     content_units: list[ContentUnit] = Field(..., description="All editable content units")
+    display_order: list[dict] = Field(default_factory=list, description="Full document structure in order for display")
     metadata: dict = Field(default_factory=dict, description="Document metadata")
 

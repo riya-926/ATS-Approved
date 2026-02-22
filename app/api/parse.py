@@ -20,30 +20,28 @@ async def parse_docx_endpoint(file: UploadFile = File(...)):
     if not file.filename.endswith(".docx"):
         raise HTTPException(status_code=400, detail="File must be a .docx file")
 
-    upload_dir = Path("test_files")
+    # Use project root for test_files (same as apply endpoint)
+    upload_dir = Path(__file__).resolve().parent.parent.parent / "test_files"
     upload_dir.mkdir(exist_ok=True)
 
-    temp_path = upload_dir / f"temp_{file.filename}"
+    # Save uploaded file (kept for apply step)
+    saved_path = upload_dir / file.filename
 
     try:
-        # Save uploaded file temporarily
-        with open(temp_path, "wb") as f:
-            content = await file.read()
+        content = await file.read()
+        with open(saved_path, "wb") as f:
             f.write(content)
 
         # Parse the document
-        parsed = parse_docx(temp_path)
+        parsed = parse_docx(saved_path)
 
         # Return structured data
         return {
             "content_units": [unit.model_dump() for unit in parsed.content_units],
+            "display_order": getattr(parsed, "display_order", []),
             "metadata": parsed.metadata,
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error parsing file: {str(e)}")
-    finally:
-        # Clean up
-        if temp_path.exists():
-            temp_path.unlink()
 

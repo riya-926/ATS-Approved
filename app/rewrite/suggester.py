@@ -216,9 +216,10 @@ def _build_rewrite_prompt(
 - Use strong action verbs at the start of bullet points
 - Avoid special characters that break ATS parsing (em dashes, fancy quotes, etc.)
 
-**JOB DESCRIPTION REQUIREMENTS:**
-Key Skills: {', '.join(jd_skills) if jd_skills else 'None specified'}
-Key Responsibilities: {', '.join(jd_responsibilities[:5]) if jd_responsibilities else 'None specified'}
+**JOB DESCRIPTION REQUIREMENTS (MUST FOLLOW):**
+- Key Skills to align with: {', '.join(jd_skills) if jd_skills else 'None specified'}
+- Key Responsibilities to address: {', '.join(jd_responsibilities[:5]) if jd_responsibilities else 'None specified'}
+- CRITICAL: Use JD keywords and terminology naturally. Prioritize JD alignment when rewording.
 
 **EVIDENCE IN THIS RESUME UNIT:**
 {chr(10).join(relevant_evidence) if relevant_evidence else 'No direct evidence matches found for this unit. Focus on ATS optimization and clarity improvements only.'}

@@ -27,10 +27,12 @@ def parse_docx(file_path: str | Path) -> ParsedResume:
     """
     doc = Document(file_path)
     content_units: list[ContentUnit] = []
+    display_order: list[dict] = []
 
     # Track section indices
     section_idx = 0
     exp_bullet_counter = 0  # Global counter for experience bullets across all experience entries
+    proj_bullet_counter = 0  # Global counter for project bullets
     skills_idx = 0
     bullet_idx = 0  # Local bullet counter per experience entry
 
@@ -48,9 +50,12 @@ def parse_docx(file_path: str | Path) -> ParsedResume:
                 continue
 
             # Detect section headers (check for Heading style OR bold + short text + common headers)
+            text_upper = text.upper()
+            exact_match = text_upper in ["EXPERIENCE", "WORK EXPERIENCE", "EMPLOYMENT", "SKILLS", "SUMMARY", "EDUCATION", "PROJECTS"]
+            projects_match = "PROJECTS" in text_upper and len(text) < 80  # e.g. "COMPUTER SCIENCE PROJECTS"
             is_header = (
                 len(text) < 80
-                and text.upper() in ["EXPERIENCE", "WORK EXPERIENCE", "EMPLOYMENT", "SKILLS", "SUMMARY", "EDUCATION"]
+                and (exact_match or projects_match)
                 and (
                     paragraph.style.name.startswith("Heading")
                     or any(run.bold for run in paragraph.runs)
@@ -58,15 +63,26 @@ def parse_docx(file_path: str | Path) -> ParsedResume:
             )
 
             if is_header:
-                current_section = text.upper()
+                current_section = "PROJECTS" if projects_match and not exact_match else text_upper
                 para_idx = 0
                 section_idx += 1
-                bullet_idx = 0  # Reset bullet counter for new section
+                bullet_idx = 0
+                header_map = {"SUMMARY": "Professional Summary", "EXPERIENCE": "Work Experience",
+                              "WORK EXPERIENCE": "Work Experience", "EMPLOYMENT": "Work Experience",
+                              "SKILLS": "Skills", "EDUCATION": "Education", "PROJECTS": "Projects"}
+                display_order.append({"kind": "display", "content": header_map.get(current_section, text), "display_type": "section_header"})
+                continue
+
+            # Before any section (name, contact)
+            if current_section is None:
+                if not display_order:
+                    display_order.append({"kind": "display", "content": text, "display_type": "name"})
+                else:
+                    display_order.append({"kind": "display", "content": text, "display_type": "contact"})
                 continue
 
             # Extract content units based on section
             if current_section in ["EXPERIENCE", "WORK EXPERIENCE", "EMPLOYMENT"]:
-                # Check if it's a bullet point (indented or starts with bullet)
                 if paragraph.style.name.startswith("List") or text.startswith(("•", "-", "*")):
                     bullet_text = text.lstrip("•-* ").strip()
                     if bullet_text:
@@ -79,8 +95,15 @@ def parse_docx(file_path: str | Path) -> ParsedResume:
                             bullet_index=bullet_idx,
                         )
                         content_units.append(unit)
+                        display_order.append({"kind": "editable", "unit_id": unit.id})
                         bullet_idx += 1
                         exp_bullet_counter += 1
+                else:
+                    # Job title or company/dates line (display only)
+                    if paragraph.style.name == "Heading 2" or (len(text) < 60 and "|" not in text and "•" not in text):
+                        display_order.append({"kind": "display", "content": text, "display_type": "job_title"})
+                    else:
+                        display_order.append({"kind": "display", "content": text, "display_type": "company_dates"})
                 para_idx += 1
 
             elif current_section == "SKILLS":
@@ -95,8 +118,35 @@ def parse_docx(file_path: str | Path) -> ParsedResume:
                         paragraph_index=para_idx,
                     )
                     content_units.append(unit)
+                    display_order.append({"kind": "editable", "unit_id": unit.id})
                     skills_idx += 1
                 para_idx += 1
+
+            elif current_section in ["PROJECTS"]:
+                if paragraph.style.name.startswith("List") or text.startswith(("•", "-", "*")):
+                    bullet_text = text.lstrip("•-* ").strip()
+                    if bullet_text:
+                        unit = ContentUnit(
+                            id=f"proj_bullet_{proj_bullet_counter}",
+                            type=ContentUnitType.PROJECT_DESCRIPTION,
+                            content=bullet_text,
+                            section_index=section_idx,
+                            paragraph_index=para_idx,
+                            bullet_index=bullet_idx,
+                        )
+                        content_units.append(unit)
+                        display_order.append({"kind": "editable", "unit_id": unit.id})
+                        bullet_idx += 1
+                        proj_bullet_counter += 1
+                else:
+                    display_order.append({"kind": "display", "content": text, "display_type": "project_title"})
+                para_idx += 1
+
+            elif current_section == "EDUCATION":
+                if paragraph.style.name == "Heading 2":
+                    display_order.append({"kind": "display", "content": text, "display_type": "education_degree"})
+                else:
+                    display_order.append({"kind": "display", "content": text, "display_type": "education_school"})
 
             elif current_section == "SUMMARY":
                 # Summary is typically the first paragraph in summary section
@@ -109,6 +159,7 @@ def parse_docx(file_path: str | Path) -> ParsedResume:
                         paragraph_index=0,
                     )
                     content_units.append(unit)
+                    display_order.append({"kind": "editable", "unit_id": unit.id})
                 para_idx += 1
 
         elif isinstance(element, CT_Tbl):
@@ -120,5 +171,5 @@ def parse_docx(file_path: str | Path) -> ParsedResume:
         "sections_found": section_idx,
     }
 
-    return ParsedResume(content_units=content_units, metadata=metadata)
+    return ParsedResume(content_units=content_units, display_order=display_order, metadata=metadata)
 
